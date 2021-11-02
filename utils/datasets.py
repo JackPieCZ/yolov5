@@ -155,6 +155,49 @@ class _RepeatSampler:
             yield from iter(self.sampler)
 
 
+class LoadArrays:  # for inference
+    def __init__(self, arrays, img_size=640, stride=32, auto=True):
+        images = list(arrays)
+        ni, nv = len(images), 0
+
+        self.img_size = img_size
+        self.stride = stride
+        self.files = images
+        self.nf = ni + nv  # number of files
+        self.video_flag = [False] * ni + [True] * nv
+        self.mode = 'image'
+        self.auto = auto
+        self.cap = None
+        assert self.nf > 0, f'No images or videos found. ' \
+                            f'Supported formats are:\nimages: {IMG_FORMATS}\nvideos: {VID_FORMATS}'
+
+    def __iter__(self):
+        self.count = 0
+        return self
+
+    def __next__(self):
+        if self.count == self.nf:
+            raise StopIteration
+        array = self.files[self.count]
+
+        self.count += 1
+        img0 = array[..., ::-1].copy().astype('float32')  # BGR
+        assert img0 is not None, 'Image Not Found'
+        # print(f'image {self.count}/{self.nf}', end='\n')
+
+        # Padded resize
+        img = letterbox(img0, self.img_size, stride=self.stride, auto=self.auto)[0]
+
+        # Convert
+        img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
+        img = np.ascontiguousarray(img)
+
+        return self.count-1, img, img0
+
+    def __len__(self):
+        return self.nf
+
+
 class LoadImages:
     # YOLOv5 image/video dataloader, i.e. `python detect.py --source image.jpg/vid.mp4`
     def __init__(self, path, img_size=640, stride=32, auto=True):
